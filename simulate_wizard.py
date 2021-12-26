@@ -1,11 +1,9 @@
 """
 Holds the classes use to simulate Wizard
 """
-from typing import Hashable
 import numpy as np
 from dataclasses import dataclass
-
-from numpy.lib.shape_base import _put_along_axis_dispatcher
+from collections import Counter
 
 
 @dataclass(eq=True, frozen=True, order=True)
@@ -105,9 +103,6 @@ class Hand:
     
 
 
-
-
-
 class Player:
 
     def __init__(self, hand:Hand, position):
@@ -133,10 +128,24 @@ class Player:
 
 class Game:
 
-    def __init__(self, deck:Deck, n_players:int, n_cards:int):
-        self.players = [Player(Hand(deck.deal_cards(n_cards)), position=position) for position in range(n_players)]
+    def __init__(self, n_players:int, n_cards:int):
+        self.deck = Deck()
+        self.n_players = n_players
+        self.n_cards = n_cards
+        self.players = [Player(Hand(self.deck.deal_cards(n_cards)), position=position) for position in range(n_players)]
+        self.trump = Game._determine_trump_suit(self.deck)
         self.play_order = Game._create_play_order_dict(self.players)
     
+
+    @staticmethod
+    def _determine_trump_suit(deck):
+        trump_card = deck.deal_cards(N_cards=1)[0]
+        if trump_card.special == None:
+            return trump_card.suit
+        elif trump_card.special == 'wizard':
+            return np.random.choice(['hearts', 'clubs', 'spades', 'diamonds'], size=1)[0]
+        elif trump_card.special == 'jester':
+            return None
 
     @staticmethod
     def _create_play_order_dict(players) -> dict:
@@ -156,24 +165,44 @@ class Game:
         return play_order
 
 
+    def compute_results(self) ->list:
+        """
+        """
+        starting_hands = [(player.position,player.hand.cards) for player in self.players]
+        first_staring_player = self.players[0]
+        winners = []
+        for _ in range(self.n_cards):
+            a_trick = Trick(self.deck, players_in_order=self.play_order[first_staring_player])
+            a_trick.get_winner_and_update_hands(self.trump)
+            winners.append(a_trick.winner.position)
+
+        winner_collections = Counter(winners)
+        
+        results = []
+        for hand in starting_hands: 
+            # this is broken, it is only recording a record for each hand. You need to do it for every starting hand
+            cards_in_hand = hand[1]
+            n_won = winner_collections[hand[0]]
+            res = {
+                'n_players':self.n_players,
+                'n_cards':self.n_cards,
+                'n_won':n_won,
+                'trump':self.trump,
+                'hand':cards_in_hand
+                 }
+
+            results.append(res)
+        
+        return results
+
+
 
 class Trick:
 
-    def __init__(self, deck:Deck, players_in_order:list):
-        self.trump = Trick._determine_trump_suit(deck)
+    def __init__(self, deck:Deck, players_in_order:list): 
+        
         self.players_in_order = players_in_order
         self.winner= None
-
-
-    @staticmethod
-    def _determine_trump_suit(deck):
-        trump_card = deck.deal_cards(N_cards=1)[0]
-        if trump_card.special == None:
-            return trump_card.suit
-        elif trump_card.special == 'wizard':
-            return np.random.choice(['hearts', 'clubs', 'spades', 'diamonds'], size=1)
-        elif trump_card.special == 'jester':
-            return None
 
 
     def get_players_to_play_trick(self):
@@ -203,16 +232,19 @@ class Trick:
         return cards_played_in_order
 
 
-    def compute_who_won_trick(self, cards_played_in_order):
+    def compute_who_won_trick(self, cards_played_in_order, trump):
 
         current_winning_player = cards_played_in_order[0][0]
         current_winning_card = cards_played_in_order[0][1]
 
-        if self.trump != None:
+        if trump != None:
             for next_player, next_card, index in cards_played_in_order[1:]:
-                if (current_winning_card.special == 'wizard') or  (next_card.special == 'jester'):
+                if (current_winning_card.special == 'wizard') or (next_card.special == 'jester'):
                     break
-                elif (current_winning_card.suit != self.trump) and (next_card.suit == self.trump):
+                elif (current_winning_card.special != 'wizard') and (next_card.special == 'wizard'):
+                    current_winning_player = next_player
+                    current_winning_card = next_card
+                elif (current_winning_card.suit != trump) and (next_card.suit == trump):
                     # if the new card is trump and the old one is not then that card is trump
                     current_winning_player = next_player
                     current_winning_card = next_card
@@ -228,11 +260,13 @@ class Trick:
             for next_player, next_card, index in cards_played_in_order[1:]:
                 if (current_winning_card.special == 'wizard') or (next_card.special == 'jester'):
                     break
-
+                elif (current_winning_card.special != 'wizard') and (next_card.special == 'wizard'):
+                    current_winning_player = next_player
+                    current_winning_card = next_card
                 elif (current_winning_card.special!='wizard') and (next_card.special == 'wizard'):
                     current_winning_player = next_player
                     current_winning_card = next_card
-
+                    
                 elif next_card.suit == suit_lead:
                     # if the suits are the same then the larger number wins
                     if current_winning_card.number < next_card.number:
@@ -243,43 +277,27 @@ class Trick:
         return current_winning_player
 
 
-    def get_winner_and_update_hands(self):
+    def get_winner_and_update_hands(self, trump):
         cards_played_in_order = self.get_players_to_play_trick()
-        winning_player = self.compute_who_won_trick(cards_played_in_order=cards_played_in_order)
+        winning_player = self.compute_who_won_trick(cards_played_in_order=cards_played_in_order,trump=trump)
         self.winner = winning_player
 
 
 
 
-from collections import Counter
+
+import pandas as pd
 
 
 def tester():
     deck = Deck()
-    a_game = Game(deck, n_players=5, n_cards=5)
+    n_players = 7
+    n_cards = 3
+    a_game = Game(n_players=n_players, n_cards=n_cards)
 
-    starting_hands = {player:player.hand for player in a_game.players}
-    first_staring_player = a_game.players[0]
-    winners=[]
-    for _ in range(5):
-        a_trick = Trick(deck, players_in_order=a_game.play_order[first_staring_player])
-        a_trick.get_winner_and_update_hands()
-        winners.append(a_trick.winner)
-
-    print(Counter(winners))
-
-
-
-
-    print('fin')
-
-
-
-
-
-
-
-
+    res = a_game.compute_results()
+    df = pd.DataFrame.from_records(res)
+    print(df.head(5))
 
 if __name__ =="__main__":
     tester()
