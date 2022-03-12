@@ -27,7 +27,7 @@ class Deck:
         self.cards_in_deck = Deck._create_new_deck()
 
     @staticmethod
-    def _create_new_deck():
+    def _create_new_deck(include_special=True):
         cards = []
 
         for suit in ['hearts', 'clubs', 'spades', 'diamonds']:
@@ -35,10 +35,11 @@ class Deck:
                 a_card = Card(number=number,suit=suit, special=None)
                 cards.append(a_card)
 
-        for special in ['wizard','jester']:
-            for number in range(0,4):
-                special_card = Card(number = number, suit=None, special=special)
-                cards.append(special_card)
+        if include_special:   
+            for special in ['wizard','jester']:
+                for number in range(0,4):
+                    special_card = Card(number = number, suit=None, special=special)
+                    cards.append(special_card)
         np.random.shuffle(cards)
         return cards
 
