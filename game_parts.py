@@ -1,12 +1,11 @@
 """
-Holds the classes use to simulate Wizard
+Holds the parts of the game
 """
-from ast import Suite
-import numpy as np
+
+from collections import Counter
 from dataclasses import dataclass
-from collections import Counter, defaultdict
 
-
+import numpy as np
 
 HEARTS = 'hearts'
 CLUBS = 'clubs'
@@ -40,7 +39,7 @@ class Deck:
 
     @staticmethod
     def _create_new_deck(include_special=True) -> set[Card]:
-        cards = [Card(number, suit, None) for suit in SUITS for number in range(2, 15)]
+        cards = set([Card(number, suit, None) for suit in SUITS for number in range(2, 15)])
         if include_special:
             special_cards = [Card(0, None, special) for special in SPECIALS for _ in range(4)]
             cards.extend(special_cards)
@@ -52,11 +51,13 @@ class Deck:
         """
         return [self.cards_in_deck.pop() for _ in range(N_cards)]
 
+
 class Hand:
     """
-    The cards a Player is holding
+    The cards a Player is holding. the cards
     """
     def __init__(self, cards: set[Card]):
+        self.starting_cards = cards.copy()
         self.cards = cards
         self.cards_by_suit: dict[str, set(Card)] = self._build_cards_by_suit()
 
@@ -69,34 +70,32 @@ class Hand:
             d[card.suit].add(card)
         return d
 
-    def _get_valid_cards(self, suit_lead: str) -> set[Card]:
+    def _get_playable_cards(self, suit_lead: str) -> set[Card]:
         """
         Given the suit lead returns a set of all the cards that it is legal for the player to play
         """
         if suit_lead is None:
-            return self.cards
+            return self.cards # if no suit lead then you can play any card
         playable_cards = self.cards_by_suit[suit_lead]
-
         if len(playable_cards) > 0:
-            playable_cards.update(self.cards_by_suit[None]) # add the special cards
+            playable_cards.update(self.cards_by_suit[None]) # add the special cards since you can always play them
         else:
             playable_cards = self.cards
         return playable_cards
 
-
     def attempt_to_play_card(self, suit_lead: str, card: Card):
-        valid_cards = self._get_valid_cards(suit_lead=suit_lead)
+        valid_cards = self._get_playable_cards(suit_lead=suit_lead)
         if card in valid_cards and card in self.cards:
             self.cards.discard(card)
             return card
         else:
-            raise ValueError(f'cannot play card {card} because it is not valid or not in hand {self.__str__()}')
+            raise ValueError(f'cannot play card {card} because it is not valid or not in hand {self}')
 
     def play_random_valid_card(self, suit_lead) -> Card:
         """
         Given the suit lead returns a random and playable card
         """
-        valid_cards = self._get_valid_cards(suit_lead=suit_lead)
+        valid_cards = self._get_playable_cards(suit_lead=suit_lead)
         random_valid_card = valid_cards.pop()
         return self.attempt_to_play_card(suit_lead, random_valid_card)
 
@@ -107,25 +106,6 @@ class Hand:
         return self.__str__()
     
 
-class Player:
-
-    def __init__(self, hand: Hand, position: int):
-        self.hand = hand # dynamic hands in the table
-        self.position = position # the seat number at the table
-        self.bid =  # how many tricks this player wants to win
-        self.tricks_won: int = 0 # a counter of how many tricks this player has won
-
-    def play_random_valid_card(self, suit_lead: str):
-        if len(self.hand.cards) > 0:
-            return self.hand.play_random_valid_card(suit_lead)
-        else:
-            raise ValueError("You cannot play cards from a hand that does not have any.")
-
-    def __str__(self) -> str:
-        return f'Position_{self.position} cards:{self.hand.__str__()}'
-
-    def __repr__(self) -> str:
-        return self.__str__()
 
 
 
@@ -168,35 +148,35 @@ class Game:
         return play_order
 
 
-    def compute_results(self) ->list:
-        """
-        """
-        starting_hands = [(player.position,player.hand.cards) for player in self.players]
-        first_staring_player = self.players[0]
-        winners = []
-        for _ in range(self.n_cards):
-            a_trick = Trick(self.deck, players_in_order=self.play_order[first_staring_player])
-            a_trick.get_winner_and_update_hands(self.trump)
-            winners.append(a_trick.winner.position)
+    # def compute_results(self) ->list:
+    #     """
+    #     """
+    #     starting_hands = [(player.position, player.hand.cards) for player in self.players] # (positon, cards in hand tuple)
+    #     first_staring_player = self.players[0]
+    #     winners = []
+    #     for _ in range(self.n_cards):
+    #         a_trick = Trick(self.deck, players_in_order=self.play_order[first_staring_player])
+    #         a_trick.get_winner_and_update_hands(self.trump)
+    #         winners.append(a_trick.winner.position)
 
-        winner_collections = Counter(winners)
+    #     winner_collections = Counter(winners)
         
-        results = []
-        for hand in starting_hands: 
-            # this is broken, it is only recording a record for each hand. You need to do it for every starting hand
-            cards_in_hand = hand[1]
-            n_won = winner_collections[hand[0]]
-            res = {
-                'n_players':self.n_players,
-                'n_cards':self.n_cards,
-                'n_won':n_won,
-                'trump':self.trump,
-                'hand':cards_in_hand
-                 }
+    #     results = []
+    #     for hand in starting_hands: 
+    #         # this is broken, it is only recording a record for each hand. You need to do it for every starting hand
+    #         cards_in_hand = hand[1]
+    #         n_won = winner_collections[hand[0]]
+    #         res = {
+    #             'n_players':self.n_players,
+    #             'n_cards':self.n_cards,
+    #             'n_won':n_won,
+    #             'trump':self.trump,
+    #             'hand':cards_in_hand
+    #              }
 
-            results.append(res)
+    #         results.append(res)
         
-        return results
+    #     return results
 
 
 
@@ -283,23 +263,3 @@ class Trick:
         cards_played_in_order = self.get_players_to_play_trick()
         winning_player = self.compute_who_won_trick(cards_played_in_order=cards_played_in_order,trump=trump)
         self.winner = winning_player
-
-
-
-
-
-import pandas as pd
-
-
-def tester():
-    deck = Deck()
-    n_players = 7
-    n_cards = 3
-    a_game = Game(n_players=n_players, n_cards=n_cards)
-
-    res = a_game.compute_results()
-    df = pd.DataFrame.from_records(res)
-    print(df.head(5))
-
-if __name__ =="__main__":
-    tester()
